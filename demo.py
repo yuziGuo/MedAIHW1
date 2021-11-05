@@ -120,10 +120,17 @@ def l0_regularized_method(x: np.array, psi: np.array, gamma: float, max_iter: in
     lr = 0.00001
     s_sq = np.zeros((200, 1))
     # s = 0
-    def apply_grad_descent(a, x, lr=lr, s_sq=s_sq):
+    def apply_grad_descent(a, x, momentum, lr=lr, s_sq=s_sq):
         grad = - (psi.T @ x - psipsi @ a)  # issue: grad might be very large
         s_sq = 0.999 * s_sq + 0.001 * grad * grad
-        grad = grad / np.sqrt(np.sum(s_sq))
+        grad = 0.99 * grad / np.sqrt(np.sum(s_sq)) 
+        # import ipdb; ipdb.set_trace()
+        noise = np.random.random(size=grad.shape) 
+        # grad = 0.75 * grad + 0.15 * noise + 0.1 * momentum
+        mask = np.random.randint(0,2,grad.shape)
+        grad  = grad * mask + momentum * (1-mask)
+        grad = 0.9*grad + 0.1*noise
+
         # grad = grad / np.sqrt(s_sq)
         ret = a - lr * grad
         return ret
@@ -135,10 +142,12 @@ def l0_regularized_method(x: np.array, psi: np.array, gamma: float, max_iter: in
     gamma_len = psi.shape[1]
     a = np.ones((gamma_len, 1)) / gamma_len  # Initialize a
 
+    _m = 0
     for epoch in range(max_iter):
         # import ipdb; ipdb.set_trace()
         # print('------{}-------'.format(epoch))
-        _a = apply_grad_descent(a, x, lr=lr,s_sq=s_sq)
+        _a = apply_grad_descent(a, x, _m, lr=lr,s_sq=s_sq)
+        _m = _a
         # print(_a[:10])
         if abs(_a[0]) > 1e10:
             assert False
@@ -346,8 +355,8 @@ with open('signal.pkl', 'rb') as f:
 d = signal.shape[0]
 dictionary = generate_dictionary(dim=d)
 n = dictionary.shape[1]
-ms = [20, 40, 60, 80, 100]
-# ms = [60, 100]
+# ms = [20, 40, 60, 80, 100]
+ms = [60, 100]
 plt.figure()
 plt.imshow(dictionary)
 plt.savefig('dictionary.pdf')
@@ -357,8 +366,8 @@ plt.close()
 #  remove the corresponding names and ensure this script can be run without errors.
 # method_names = ['L2reg', 'MP', 'OMP', 'BP', 'L0reg', 'ADMM']
 # method_names = ['BP']
-# method_names = ['L0reg']
-method_names = ['ADMM']
+method_names = ['L0reg']
+# method_names = ['ADMM']
 
 """Task 1: Implement Compressive Sensing by Your Sparse Coding Algorithms"""
 print('Task 1:\n')
@@ -375,7 +384,7 @@ for i in range(len(ms)):
         elif method_names[j] == 'BP':
             a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
         elif method_names[j] == 'L0reg':
-            a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000)  # sensor: (20,100), dict:(100,200)
+            a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=500000)  # 200000 good # sensor: (20,100), dict:(100,200)
         elif method_names[j] == 'ADMM':
             a_est = admm_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
         else:
