@@ -1,5 +1,6 @@
 """
-AI-Empowered Medicine and Healthcare Homework 1
+AI-Empowered Medicine and Healthcare Homework 1 
+Author: YH G; QM W.
 
 Sparse Coding for noisy data
 
@@ -40,6 +41,7 @@ def matching_pursuit(x: np.array, psi: np.array, s: int) -> np.array:
         psi[:, i] = psi[:, i]/ np.linalg.norm(psi[:, i])
         a[i] = np.transpose(r) @ psi[:,i]
         r = r - np.transpose([a[i] * psi[:, i]])
+    return a
 
 
 def orthogonal_matching_pursuit(x: np.array, psi: np.array, s: int) -> np.array:
@@ -83,7 +85,7 @@ def basis_pursuit(x: np.array, psi: np.array, gamma: float, max_iter: int) -> np
     # pre-compute: psipsi = psi^T @ psi
     psipsi = psi.T @ psi # (200, 200)
     lr = 0.00005
-    s = np.zeros((200, 1))
+    s = np.zeros((psi.shape[1], 1))
     def apply_grad_descent(a, x, lr=lr, s=s):
         grad = - (psi.T @ x - psipsi @ a)  # issue: grad might be very large
         # print(grad[:10])
@@ -139,12 +141,12 @@ def l0_regularized_method(x: np.array, psi: np.array, gamma: float, max_iter: in
     import math
     psipsi = psi.T @ psi # (200, 200)
     lr = 0.00001
-    s_sq = np.zeros((200, 1))
+    s_sq = np.zeros((psi.shape[1], 1))
     # s = 0
     def apply_grad_descent(a, x, momentum, lr=lr, s_sq=s_sq):
         grad = - (psi.T @ x - psipsi @ a)  # issue: grad might be very large
         s_sq = 0.999 * s_sq + 0.001 * grad * grad
-        grad = 0.99 * grad / np.sqrt(np.sum(s_sq)) 
+        grad = grad / np.sqrt(np.sum(s_sq)) 
         # grad = grad/ np.sqrt(s_sq)
         # import ipdb; ipdb.set_trace()
         # grad = 0.75 * grad + 0.15 * noise + 0.1 * momentum
@@ -391,7 +393,6 @@ d = signal.shape[0]
 dictionary = generate_dictionary(dim=d)
 n = dictionary.shape[1]
 ms = [20, 40, 60, 80, 100]
-# ms = [40]
 plt.figure()
 plt.imshow(dictionary)
 plt.savefig('dictionary.pdf')
@@ -399,13 +400,10 @@ plt.close()
 
 # TODO: If you fail to implement some of the algorithms,
 #  remove the corresponding names and ensure this script can be run without errors.
-# method_names = ['L2reg', 'MP', 'OMP', 'BP', 'L0reg', 'ADMM']
-# method_names = ['BP']
-# method_names = ['L0reg']
-method_names = ['ADMM']
+method_names = ['L2reg', 'MP', 'OMP', 'BP', 'L0reg', 'ADMM']
 
-"""Task 1: Implement Compressive Sensing by Your Sparse Coding Algorithms"""
-print('Task 1:\n')
+# """Task 1: Implement Compressive Sensing by Your Sparse Coding Algorithms"""
+# print('Task 1:\n')
 results = np.zeros((len(ms), len(method_names)))
 # generate sensing matrix and apply compressive sensing
 for i in range(len(ms)):
@@ -414,8 +412,11 @@ for i in range(len(ms)):
     for j in range(len(method_names)):
         # baseline: recover signal with l2-regularization
         if method_names[j] == 'L2reg':
-            continue
             a_est = l2_regularized_method(x=compressed_signal, psi=sensor @ dictionary)
+        elif method_names[j] == 'MP':
+            a_est = matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/4)) 
+        elif method_names[j] == 'OMP':
+            a_est = orthogonal_matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/4))     
         elif method_names[j] == 'BP':
             a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
         elif method_names[j] == 'L0reg':
@@ -434,73 +435,104 @@ for i in range(len(ms)):
 with open('results_task1.pkl', 'wb') as f:
     pickle.dump(results, f)
 
-
 # """Task 2: Design A New Sensing Matrix and Repeat The Experiments in Task 1"""
-# # print('Task 2:\n')
-# results = np.zeros((len(ms), len(method_names)))
-# # generate sensing matrix and apply compressive sensing
-# for i in range(len(ms)):
-#     sensor = generate_sensor(m=ms[i], dim=dictionary.shape[0])
-#     # import ipdb; ipdb.set_trace()
-#     compressed_signal = compressive_sensing(phi=sensor, x=signal)
-#     for j in range(len(method_names)):
-#         # baseline: recover signal with l2-regularization
-#         if method_names[j] == 'L2reg':
-#             a_est = l2_regularized_method(x=compressed_signal, psi=sensor @ dictionary)
-#         elif method_names[j] == 'BP':
-#             a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
-#         elif method_names[j] == 'L0reg':
-#             a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=200000)  # 200000 good # sensor: (20,100), dict:(100,200)
-#         elif method_names[j] == 'ADMM':
-#             a_est = admm_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
-#         else:
-#             # TODO: Replace the following line with your method, e.g., a_est = YOUR-METHOD(...)
-#             a_est = np.zeros((n, 1))
-#         signal_est = reconstruct_signal(psi=dictionary, a=a_est)
-#         results[i, j] = evaluation(signal, signal_est,
-#                                    method_name='{}+M{}'.format(method_names[j], ms[i]),
-#                                    plot_result=False)
+print('Task 2:\n')
+results = np.zeros((len(ms), len(method_names)))
+# generate sensing matrix and apply compressive sensing
+for i in range(len(ms)):
+    sensor = generate_sensor(m=ms[i], dim=dictionary.shape[0])
+    compressed_signal = compressive_sensing(phi=sensor, x=signal)
+    for j in range(len(method_names)):
+        # baseline: recover signal with l2-regularization
+        if method_names[j] == 'L2reg':
+            a_est = l2_regularized_method(x=compressed_signal, psi=sensor @ dictionary)
+        elif method_names[j] == 'MP':
+            a_est = matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/2)) 
+        elif method_names[j] == 'OMP':
+            a_est = orthogonal_matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/2))  
+        elif method_names[j] == 'BP':
+            a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
+        elif method_names[j] == 'L0reg':
+            a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=200000)  # 200000 good # sensor: (20,100), dict:(100,200)
+        elif method_names[j] == 'ADMM':
+            a_est = admm_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
+        else:
+            # TODO: Replace the following line with your method, e.g., a_est = YOUR-METHOD(...)
+            a_est = np.zeros((n, 1))
+        signal_est = reconstruct_signal(psi=dictionary, a=a_est)
+        results[i, j] = evaluation(signal, signal_est,
+                                   method_name='{}+M{}'.format(method_names[j], ms[i]),
+                                   plot_result=False)
 
-# with open('results_task2.pkl', 'wb') as f:
-#     pickle.dump(results, f)
+with open('results_task2.pkl', 'wb') as f:
+    pickle.dump(results, f)
 
 
-# """Task 3: The Robustness of Sparse Coding Methods to Noise"""
-# print('Task 3:\n')
-# sigma = [0, 0.1, 0.5, 1, 1.5]
-# sensor = generate_binary_sensor(m=40, dim=dictionary.shape[0])  # Rethink
-# results = np.zeros((len(sigma), len(sigma), len(method_names)))
-# for i in range(len(sigma)):
-#     noisy_signal = signal + sigma[i] * np.random.RandomState(seed=42).randn(signal.shape[0], 1)
-#     for j in range(len(sigma)):
-#         compressed_noisy_signal = compressive_sensing(phi=sensor, x=noisy_signal)
-#         compressed_noisy_signal += sigma[j] * np.random.RandomState(seed=42).randn(compressed_noisy_signal.shape[0], 1)
-#         for k in range(len(method_names)):
-#             # baseline: recover signal with l2-regularization
-#             if method_names[j] == 'L2reg':
-#                 a_est = l2_regularized_method(x=compressed_signal, psi=sensor @ dictionary)
-#             elif method_names[j] == 'BP':
-#                 a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
-#             elif method_names[j] == 'L0reg':
-#                 a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=200000)  # 200000 good # sensor: (20,100), dict:(100,200)
-#             elif method_names[j] == 'ADMM':
-#                 a_est = admm_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
-#             else:
-#                 # TODO: Replace the following line with your method, e.g., a_est = YOUR-METHOD(...)
-#                 a_est = np.zeros((n, 1))
-#             signal_est = reconstruct_signal(psi=dictionary, a=a_est)
-#             results[i, j, k] = evaluation(signal, signal_est, method_name='{}+N{}N{}'.format(method_names[k], i, j),
-#                                           plot_result=False)
-# with open('results_task3.pkl', 'wb') as f:
-#     pickle.dump(results, f)
+"""Task 3: The Robustness of Sparse Coding Methods to Noise"""
+print('Task 3:\n')
+sigma = [0, 0.1, 0.5, 1, 1.5]
+sensor = generate_binary_sensor(m=50, dim=dictionary.shape[0])  # Rethink
+results = np.zeros((len(sigma), len(sigma), len(method_names)))
+for i in range(len(sigma)):
+    noisy_signal = signal + sigma[i] * np.random.RandomState(seed=42).randn(signal.shape[0], 1)
+    for j in range(len(sigma)):
+        compressed_noisy_signal = compressive_sensing(phi=sensor, x=noisy_signal)
+        compressed_noisy_signal += sigma[j] * np.random.RandomState(seed=42).randn(compressed_noisy_signal.shape[0], 1)
+        for k in range(len(method_names)):
+            # baseline: recover signal with l2-regularization
+            if method_names[k] == 'L2reg':
+                a_est = l2_regularized_method(x=compressed_noisy_signal, psi=sensor @ dictionary)
+            elif method_names[k] == 'MP':
+                a_est = matching_pursuit(x=compressed_noisy_signal, psi=sensor @ dictionary, s=int(n/2)) 
+            elif method_names[k] == 'OMP':
+                a_est = orthogonal_matching_pursuit(x=compressed_noisy_signal, psi=sensor @ dictionary, s=int(n/2)) 
+            elif method_names[k] == 'BP':
+                a_est = basis_pursuit(x=compressed_noisy_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
+            elif method_names[k] == 'L0reg':
+                a_est = l0_regularized_method(x=compressed_noisy_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=200000)  # 200000 good # sensor: (20,100), dict:(100,200)
+            elif method_names[k] == 'ADMM':
+                a_est = admm_method(x=compressed_noisy_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
+            else:
+                # TODO: Replace the following line with your method, e.g., a_est = YOUR-METHOD(...)
+                a_est = np.zeros((n, 1))
+            signal_est = reconstruct_signal(psi=dictionary, a=a_est)
+            results[i, j, k] = evaluation(signal, signal_est, method_name='{}+N{}N{}'.format(method_names[k], i, j),
+                                          plot_result=False)
+with open('results_task3.pkl', 'wb') as f:
+    pickle.dump(results, f)
 
 
 """Task 4: Try to recover the signal based on a subset of the dictionary"""
-# print('Task 4:\n')
-# dictionary = dictionary[:, :int(n / 2)]
-# print('dictionary size: {}'.format(dictionary.shape))
-# sensor = generate_binary_sensor(m=50, dim=dictionary.shape[0])
-# compressed_signal = compressive_sensing(phi=sensor, x=signal)
+print('Task 4:\n')
+dictionary = dictionary[:, :int(n / 2)]
+print('dictionary size: {}'.format(dictionary.shape))
+sensor = generate_binary_sensor(m=50, dim=dictionary.shape[0])
+compressed_signal = compressive_sensing(phi=sensor, x=signal)
 # TODO: Implement a method to recover the signal and record its mse
 
-
+results = np.zeros(len(method_names))
+sensor = generate_binary_sensor(m=50, dim=dictionary.shape[0])
+compressed_signal = compressive_sensing(phi=sensor, x=signal)  # signal:(100,1)  compressed:(20,1)
+for i in range(len(method_names)):
+    # baseline: recover signal with l2-regularization
+    if method_names[i] == 'L2reg':
+        a_est = l2_regularized_method(x=compressed_signal, psi=sensor @ dictionary)
+    elif method_names[i] == 'MP':
+        a_est = matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/4)) 
+    elif method_names[i] == 'OMP':
+        a_est = orthogonal_matching_pursuit(x=compressed_signal, psi=sensor @ dictionary, s=int(n/4))     
+    elif method_names[i] == 'BP':
+        a_est = basis_pursuit(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=100000) #100000  # sensor: (20,100), dict:(100,200)
+    elif method_names[i] == 'L0reg':
+        a_est = l0_regularized_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=200000)  # 200000 good # sensor: (20,100), dict:(100,200)
+    elif method_names[i] == 'ADMM':
+        a_est = admm_method(x=compressed_signal, psi=sensor @ dictionary, gamma=0.2, max_iter=1000) 
+    else:
+        # TODO: Replace the following line with your method, e.g., a_est = YOUR-METHOD(...)
+        a_est = np.zeros((n, 1))
+    signal_est = reconstruct_signal(psi=dictionary, a=a_est)
+    results[i] = evaluation(signal, signal_est,
+                                method_name='{}+M{}'.format(method_names[i], 50),
+                                plot_result=False)
+with open('results_task4.pkl', 'wb') as f:
+    pickle.dump(results, f)
